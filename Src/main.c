@@ -39,13 +39,25 @@ void proccesDmaData(uint8_t sign);
 
 /* Space for your global variables. */
 
-	// type your global variables here:
-volatile uint32_t rx_count = 0;
+/* Max. number of signs after '#' within which '$' has to be received */
+#define MAX_STRING_LEN 35
 
-/* TEMP test callback for step 3 - counts received bytes */
-void rx_test(uint8_t c)
+/* Result of last valid string - amount of small and capital letters */
+letter_count_ letter_count = {0};
+
+/* Last valid string (without '#' and '$') */
+char valid_string[MAX_STRING_LEN];
+
+/* Set in proccesDmaData when new valid string is received, cleared in main loop */
+volatile uint8_t valid_string_ready = 0;
+
+/* Buffer for messages transmitted via USART2 */
+char tx_msg[100];
+
+/* Wait until previous DMA transmission is finished */
+static void wait_tx_done(void)
 {
-	rx_count++;
+	while(LL_DMA_IsEnabledChannel(DMA1, LL_DMA_CHANNEL_7));
 }
 
 
@@ -68,7 +80,7 @@ int main(void)
   /* Space for your local variables, callback registration ...*/
 
   	  //type your code here:
-  USART2_RegisterCallback(rx_test);
+  USART2_RegisterCallback(proccesDmaData);
 
   while (1)
   {
@@ -85,12 +97,19 @@ int main(void)
 	   */
 
   	  	  	  //type your code here:
-	  /* TEMP test for step 3 */
-	  char msg[64];
-	  int len = sprintf(msg, "prijate: %lu, pos: %u\r\n", rx_count,
-			  (unsigned)(DMA_USART2_BUFFER_SIZE - LL_DMA_GetDataLength(DMA1, LL_DMA_CHANNEL_6)));
-	  USART2_PutBuffer((uint8_t*)msg, len);
-	  LL_mDelay(1000);
+	  if(valid_string_ready)
+	  {
+		  wait_tx_done();
+
+		  /* proccesDmaData runs in interrupt - don't let it change data while formatting */
+		  __disable_irq();
+		  int len = sprintf(tx_msg, "Valid string: %s, lower-case: %d, upper-case: %d\r\n",
+				  valid_string, letter_count.small_letter, letter_count.capital_letter);
+		  valid_string_ready = 0;
+		  __enable_irq();
+
+		  USART2_PutBuffer((uint8_t*)tx_msg, len);
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -133,8 +152,56 @@ void SystemClock_Config(void)
 void proccesDmaData(uint8_t sign)
 {
 	/* Process received data */
+	static uint8_t receiving = 0;			/* '#' was received, waiting for '$' */
+	static uint8_t len = 0;					/* signs received after '#' */
+	static char string[MAX_STRING_LEN];
+	static letter_count_ count = {0};
 
-		// type your algorithm here:
+	if(sign == '#')
+	{
+		/* start (or restart) of new string */
+		receiving = 1;
+		len = 0;
+		count.small_letter = 0;
+		count.capital_letter = 0;
+		return;
+	}
+
+	if(!receiving) return;
+
+	len++;
+
+	if(sign == '$')
+	{
+		/* valid string - publish result for main loop */
+		string[len - 1] = '\0';
+		for(uint8_t i = 0; i < len; i++)
+		{
+			valid_string[i] = string[i];
+		}
+		letter_count = count;
+		valid_string_ready = 1;
+		receiving = 0;
+		return;
+	}
+
+	if(len >= MAX_STRING_LEN)
+	{
+		/* '$' not received within 35 signs - discard data */
+		receiving = 0;
+		return;
+	}
+
+	string[len - 1] = sign;
+
+	if(sign >= 'a' && sign <= 'z')
+	{
+		count.small_letter++;
+	}
+	else if(sign >= 'A' && sign <= 'Z')
+	{
+		count.capital_letter++;
+	}
 }
 
 
