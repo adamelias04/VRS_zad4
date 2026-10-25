@@ -23,6 +23,7 @@
 #include "dma.h"
 #include "usart.h"
 #include "gpio.h"
+#include <stdio.h>
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -39,6 +40,13 @@ void proccesDmaData(uint8_t sign);
 /* Space for your global variables. */
 
 	// type your global variables here:
+volatile uint32_t rx_count = 0;
+
+/* TEMP test callback for step 3 - counts received bytes */
+void rx_test(uint8_t c)
+{
+	rx_count++;
+}
 
 
 int main(void)
@@ -60,6 +68,7 @@ int main(void)
   /* Space for your local variables, callback registration ...*/
 
   	  //type your code here:
+  USART2_RegisterCallback(rx_test);
 
   while (1)
   {
@@ -76,6 +85,12 @@ int main(void)
 	   */
 
   	  	  	  //type your code here:
+	  /* TEMP test for step 3 */
+	  char msg[64];
+	  int len = sprintf(msg, "prijate: %lu, pos: %u\r\n", rx_count,
+			  (unsigned)(DMA_USART2_BUFFER_SIZE - LL_DMA_GetDataLength(DMA1, LL_DMA_CHANNEL_6)));
+	  USART2_PutBuffer((uint8_t*)msg, len);
+	  LL_mDelay(1000);
   }
   /* USER CODE END 3 */
 }
@@ -94,7 +109,7 @@ void SystemClock_Config(void)
    /* Wait till HSI is ready */
   while(LL_RCC_HSI_IsReady() != 1)
   {
-    
+
   }
   LL_RCC_HSI_SetCalibTrimming(16);
   LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
