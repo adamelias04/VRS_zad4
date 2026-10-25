@@ -51,6 +51,11 @@ char valid_string[MAX_STRING_LEN];
 /* Set in proccesDmaData when new valid string is received, cleared in main loop */
 volatile uint8_t valid_string_ready = 0;
 
+/* Period of DMA Rx buffer state transmission - 0.5 Hz */
+#define BUFFER_STATE_PERIOD_MS 2000
+
+volatile uint32_t tick_ms = 0;
+
 /* Buffer for messages transmitted via USART2 */
 char tx_msg[100];
 
@@ -82,6 +87,10 @@ int main(void)
   	  //type your code here:
   USART2_RegisterCallback(proccesDmaData);
 
+  /* SysTick is already set to 1 ms by LL_Init1msTick, enable its interrupt for tick_ms */
+  LL_SYSTICK_EnableIT();
+  uint32_t last_state_tick = 0;
+
   while (1)
   {
 	  /* Periodic transmission of information about DMA Rx buffer state.
@@ -97,6 +106,20 @@ int main(void)
 	   */
 
   	  	  	  //type your code here:
+	  if(tick_ms - last_state_tick >= BUFFER_STATE_PERIOD_MS)
+	  {
+		  last_state_tick += BUFFER_STATE_PERIOD_MS;
+
+		  uint16_t occupied = DMA_USART2_BUFFER_SIZE - LL_DMA_GetDataLength(DMA1, LL_DMA_CHANNEL_6);
+		  /* load in tenths of percent, rounded - printf without float support */
+		  uint16_t load = (occupied * 1000 + DMA_USART2_BUFFER_SIZE / 2) / DMA_USART2_BUFFER_SIZE;
+
+		  wait_tx_done();
+		  int len = sprintf(tx_msg, "Buffer capacity: %d bytes, occupied memory: %d bytes, load [in %%]: %d.%d%%\r\n",
+				  DMA_USART2_BUFFER_SIZE, occupied, load / 10, load % 10);
+		  USART2_PutBuffer((uint8_t*)tx_msg, len);
+	  }
+
 	  if(valid_string_ready)
 	  {
 		  wait_tx_done();

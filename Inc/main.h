@@ -68,6 +68,9 @@ typedef struct
 	uint8_t capital_letter;
 }letter_count_;
 
+/* Milliseconds since start, incremented in SysTick_Handler */
+extern volatile uint32_t tick_ms;
+
 #ifdef __cplusplus
 }
 #endif
